@@ -1,0 +1,258 @@
+---
+title: "Water quality monitoring report, download date 2022-11_14"
+output: html_document
+date: "2022-11-16"
+---
+<style type="text/css">
+h1.title {
+  font-size: 24px;
+  color: DarkRed;
+}
+</style>
+
+#### Sonde at IBWC gage
+#### Serial number 12215259
+
+```{r setup, include=FALSE}
+
+## WQDATALIVE QA/QC REPORT FOR MANTA AND OBS AT IBWC GAGE
+## Period ending 2022-11-14
+knitr::opts_chunk$set(echo = FALSE, warning = FALSE, message = FALSE)
+```
+
+```{r}
+library(htmlTable)
+library(plotly)
+library(knitr)
+
+download.date = "2022_11_14"  # Date that data were downloaded.  Can be text...use to load the right file
+
+# Load QAQC'd data, plot time series
+  # Data file with all data retained regardless of QAQC status
+indir.wqdl.w.alldata = "K:/Shared drives/Project - Tijuana River Monitoring/data/sonde_IBWC_12215259/wqdatalive_downloads/2_raw_with_RV_alldata/"
+
+   # Data file with "bad" data for ALL parameters removed (assigned NA)
+indir.wqdl.qaqc = "K:/Shared drives/Project - Tijuana River Monitoring/data/sonde_IBWC_12215259/wqdatalive_downloads/3_post_QAQC/"
+
+fname.raw = paste0(download.date,"_w_RV_all_raw_data.csv")
+fname.qaqc = paste0(download.date,"_QAQC_w_RV.csv")
+
+setwd(indir.wqdl.w.alldata)
+xdf.raw = read.csv(fname.raw)
+xdf.raw$Date.time = as.POSIXlt(xdf.raw$Date.time)
+
+setwd(indir.wqdl.qaqc)
+xdf.qaqc = read.csv(fname.qaqc)
+xdf.qaqc$Date.time = as.POSIXlt(xdf.qaqc$Date.time)
+
+# Load in quality flags and notes
+{
+indir.qaqc.notes = "K:/Shared drives/Project - Tijuana River Monitoring/data/sonde_IBWC_12215259/wqdatalive_downloads/"
+flist.qaqc = list.files(indir.qaqc.notes,pattern="csv")
+qaqc.length = length(flist.qaqc)
+setwd(indir.qaqc.notes)
+x.qaqc = read.csv(flist.qaqc)
+x.qaqc$Start.date.time = strptime(x.qaqc$Start,format="%m/%d/%Y %H:%M")
+x.qaqc$End.date.time = strptime(x.qaqc$End,format="%m/%d/%Y %H:%M")
+}
+```
+
+### 1. Table of QAQC notes.  
+Table created using field notes and visual interpretation of time series.
+Notes file is 
+  Visual examination performed on wqdatalive and using plot_ly in 2_interactive_qaqc_each_parm.R.
+  
+X = parameter invalid (sensor dry, sedimentation, malfunction)
+CAL = calibration problem; fixable by back-calibrating to RV values
+VAR = Values erratic or variable; potential issue with quality
+RNG = values out of range of the sensor
+```{r}
+#table.qaqc.notes <- htmlTable(
+#  x.qaqc,
+#  caption = paste("Table 1. QAQC notes for download date",download.date)
+#)
+
+kable(x.qaqc[,1:(ncol(x.qaqc)-2)])  # -2 removes last two columns for the table (Start.time.posix)
+
+```
+
+Example of interactive plot used to determine QAQC break dates and times, here for Turbidity OBS side-scatter.
+```{r}
+plot_ly(x=as.character(xdf.qaqc$Date.time),y=xdf.qaqc$Turb.SS.TU,type="scatter",mode="lines")
+```
+
+### 2. Time series plot, entire period
+Plot of all raw data (black line), and final raw data (blue).  Gray boxes indicate periods where all parameters were not valid.  This can be caused by the sonde being dry, by significant biofouling, or by sedimentation on the sonde.
+
+For November 14, 2022 download, the sonde was dry until Nov 8, and had significant sedimentation on Nov 9:
+
+```{r}
+plot.ts.nona <- function(parm.xdf){
+  {
+    par(mar=c(1,5,1,3))
+    plot(xdf.raw$Date.time,xdf.raw[,parm.xdf],type="l",lwd=3,col="black",las=1,ylab="") 
+    mtext(side=2,parm.xdf,line=3.5)
+    lines(xdf.qaqc$Date.time,xdf.qaqc[,parm.xdf],col="blue")
+  }
+}
+
+plot.rect.nodata <- function(parname.xdf){  # Plot grey rectangles where there is no-data for all parameters
+  x.qaqc.ALL = x.qaqc[x.qaqc$Parameter=="ALL",]  # Only where all parameters were bad
+  for (r in 1:nrow(x.qaqc.ALL)){
+  x.qaqc.sub = x.qaqc.ALL[r,]
+  rect(xleft=x.qaqc.sub$Start.date.time,ybottom=0,xright=x.qaqc.sub$End.date.time,ytop=max(xdf.raw[,parname.xdf],na.rm=TRUE),col= rgb(0.5,0.5,0.5,alpha=0.25))
+  text(x=x.qaqc.sub$Start.date.time,y=0.9*max(xdf.raw[,parname.xdf],na.rm=TRUE),labels=x.qaqc.sub$Comment, cex=0.8)
+}
+}
+{
+  par(mfrow=c(3,1))
+  plot.ts.nona(parm.xdf="TRYP.ppb")
+  plot.rect.nodata("TRYP.ppb")
+  legend("topleft",c("All data","Valid data"),col=c("black","blue"),lty=1)
+  plot.ts.nona(parm.xdf="CDOM.ugL")
+  plot.rect.nodata("CDOM.ugL")
+  plot.ts.nona(parm.xdf="Turb.Manta.FNU")
+  plot.rect.nodata(parname.xdf="Turb.Manta.FNU")
+}
+
+```
+
+### 3.  Time series plot, period with valid data
+2022-11-14 notes:
+Most parameters had valid values over the period.  TRYP and CDOM were low due to miscalibration; the raw "return values" were therefore back-calculated using the calibration logs, and a second value of TRYP and CDOM calculated using the long-term stable calibration values for turning RV into ppb. Plots below are the raw values prior to recalibration.
+
+```{r}
+xdf.qaqc = xdf.qaqc[!is.na(xdf.qaqc$Temp.C),] # Shorten to just where there is Temp data on the sonde--sonde always reports temperature.  Equivalent to excluding rows where all parameters have NA values.
+
+par(mfrow=c(3,1),mar=c(1,1,1,1),oma=c(2,3,0,3))
+# Plot temp and pH together
+{
+plot(xdf.qaqc$Date.time,xdf.qaqc$Temp.C,type="l",xlab="",ylab="",col="black",format = "%b %d %H:%M")
+mtext(side=2,line=2.5,"TempC")
+par(new=TRUE)
+plot(xdf.qaqc$Date.time,xdf.qaqc$pH,type="l",col="blue",yaxt="n",xaxt="n")
+axis(side=4)
+mtext(side=4,line=2.5,"pH")
+legend("topright",c("Temp","pH"),lty=1,col=c("black","blue"))
+}
+
+# Plot conductivity, DO together
+{
+plot(xdf.qaqc$Date.time,xdf.qaqc$Cond.uS.cm,type="l",xlab="",ylab="",col="black",format = "%b %d %H:%M")
+mtext(side=2,line=2.5,"Cond uS/cm")
+par(new=TRUE)
+plot(xdf.qaqc$Date.time,xdf.qaqc$DO.mgL,type="l",col="blue",yaxt="n",xaxt="n")
+axis(side=4)
+mtext(side=4,line=2.5,"DO mg/L")
+legend("topright",c("Cond","DO"),lty=1,col=c("black","blue"))
+}
+
+# Plot CDOM, TRYP together
+{
+  plot(xdf.qaqc$Date.time,xdf.qaqc$TRYP.ppb,type="l",xlab="",ylab="",col="black",format = "%b %d %H:%M")
+  mtext(side=2,line=2.5,"TRYP ppb")
+  par(new=TRUE)
+  plot(xdf.qaqc$Date.time,xdf.qaqc$CDOM.ugL,type="l",col="blue",yaxt="n",xaxt="n")
+  axis(side=4)
+  mtext(side=4,line=2.5,"CDOM ug/L")
+  legend("topright",c("TRYP","CDOM"),lty=1,col=c("black","blue"))
+}
+
+```
+
+Next: recalculate TRYP and CDOM using default calibrations.
+Calculate % ww using the TRYP-WW regression from the WW lab addition experiments.
+
+### 4. Time series of turbidity, all turbidimeters
+Turbidity values followed the same pattern for all 3 sensors but had some unlikely value drops at the storm peak.
+```{r}
+par(mfrow=c(1,1))
+{
+  plot(xdf.qaqc$Date.time,xdf.qaqc$Turb.SS.TU,type="l",xlab="",ylab="",col="black",format = "%b %d %H:%M")
+  lines(xdf.qaqc$Date.time,xdf.qaqc$Turb.BS.TU,col="blue")
+  mtext(side=2,line=2.5,"OBS BS or SS")
+  par(new=TRUE)
+  plot(xdf.qaqc$Date.time,xdf.qaqc$Turb.Manta.FNU,type="l",col="green",yaxt="n",xaxt="n",xlab="",ylab="")
+  axis(side=4)
+  mtext(side=4,line=2.5,"Manta")
+  legend("topright",c("OBS BS","OBS SS","Manta"),lty=1,col=c("black","blue","green"))
+}
+```
+
+### 5.  Time series plot, including quality flags
+VAR = variable, possible quality problems
+RNG = variable out of range
+CAL = requires recalibration
+X = variable invalid
+
+#### 5.1. TRYP and CDOM with flags
+TRYP requires recalculation with different calibration parameters--should be higher than that for the raw sewage present at the beginning of the storm.
+
+```{r}
+# Code below extracted from K:/Shared drives/Project - Tijuana River Monitoring/data/sonde_IBWC_12215259/Rscripts_sondes/2_interactive_qaqc_each_parm.R
+
+par(oma=c(3,3,1,3))
+outdir.qaqc.w.flags = "K:/Shared drives/Project - Tijuana River Monitoring/data/sonde_IBWC_12215259/wqdatalive_downloads/4_with_flags/"
+fname.timeseries.qaqc.w.flags = paste0(download.date,"_QAQC_w_flags.csv")
+xdf.flags = read.csv(paste0(outdir.qaqc.w.flags,fname.timeseries.qaqc.w.flags))
+xdf.flags$Date.time = as.POSIXlt(xdf.flags$Date.time)
+
+linetype.by.qaqc = data.frame(Flag = c("CAL","CAL,RNG","G","X","VAR"),linetypes=c(2,3,1,3,5))
+pch.by.qaqc = data.frame(Flag = c("CAL","CAL,RNG","G","X","VAR"),pchval=c(1,4,NA,4,0))  
+
+# plot time series and flag for each variable
+# Plot CDOM, TRYP together
+{
+  linetype.tryp = merge(xdf.flags[,c("Date.time","TRYP.ppb","TRYP.Flag")],linetype.by.qaqc,by.x="TRYP.Flag",by.y="Flag")
+  pchval.tryp = merge(xdf.flags[,c("Date.time","TRYP.ppb","TRYP.Flag")],pch.by.qaqc,by.x="TRYP.Flag",by.y="Flag")
+  pchval.tryp = pchval.tryp[order(pchval.tryp$Date.time),]
+  plot(xdf.flags$Date.time,xdf.flags$TRYP.ppb,type="l",xlab="",ylab="",col="black",lty=linetype.tryp$linetypes,format="%b%d %H:%M")
+  points(xdf.flags$Date.time,xdf.flags$TRYP.ppb,pch=pchval.tryp$pchval,col="black")
+  mtext(side=2,line=2.5,"TRYP ppb")
+  
+  linetype.cdom = merge(xdf.flags[,c("Date.time","CDOM.ugL","CDOM.Flag")],linetype.by.qaqc,by.x="CDOM.Flag",by.y="Flag")
+  pchval.cdom = merge(xdf.flags[,c("Date.time","CDOM.ugL","CDOM.Flag")],pch.by.qaqc,by.x="CDOM.Flag",by.y="Flag")
+  pchval.cdom = pchval.cdom[order(pchval.cdom$Date.time),]
+  par(new=TRUE)
+  plot(xdf.flags$Date.time,xdf.flags$CDOM.ugL,type="l",col="blue",yaxt="n",xaxt="n",lty=linetype.cdom$linetypes,ylab="",xlab="")
+  points(xdf.flags$Date.time,xdf.flags$CDOM.ugL,pch=pchval.cdom$pchval,col="blue")
+  axis(side=4)
+  mtext(side=4,line=2.5,"CDOM ug/L")
+  legend("topright",c("TRYP","CDOM"),lty=1,col=c("black","blue"))
+}
+
+```
+
+#### 5.2 Turbidity plots with flags
+```{r}
+{
+  par(xpd=T,mar=c(3,4,3,4))   # 
+   # Setting margins allows for plotting legend outside the plot boundary
+  xdf.ss = xdf.flags[,c("Date.time","Turb.SS.TU","Turb.SS.Flag")]
+  linetype.ss = merge(xdf.ss,linetype.by.qaqc,by.x="Turb.SS.Flag",by.y="Flag")
+  pchval.ss = merge(xdf.ss,pch.by.qaqc,by.x="Turb.SS.Flag",by.y="Flag",all.x=TRUE,sort=FALSE)
+  # check
+  pchval.ss = pchval.ss[order(pchval.ss$Date.time),]
+  
+  pchval.bs = merge(xdf.flags[,c("Date.time","Turb.BS.TU","Turb.BS.Flag")],pch.by.qaqc,by.x="Turb.BS.Flag",by.y="Flag")
+  pchval.bs = pchval.bs[order(pchval.bs$Date.time),]
+  
+  pchval.turb.manta = merge(xdf.flags[,c("Date.time","Turb.Manta.FNU","Turb.Manta.Flag")],pch.by.qaqc,by.x="Turb.Manta.Flag",by.y="Flag")
+  pchval.turb.manta = pchval.turb.manta[order(pchval.turb.manta$Date.time),]
+  
+  # data.frame(xdf[,c("Turb.SS.TU","Turb.SS.Flag")],pchval.ss)  # check
+  plot(xdf.flags$Date.time,xdf.flags$Turb.SS.TU,type="l",xlab="",ylab="",col="black",lty=1,format="%b%d %H:%M")
+  points(xdf.flags$Date.time,xdf.flags$Turb.SS.TU,pch=pchval.ss$pchval,col="black")
+  lines(xdf.flags$Date.time,xdf.flags$Turb.BS.TU,col="blue")
+  points(xdf.flags$Date.time,xdf.flags$Turb.BS.TU,pch=pchval.bs$pchval,col="blue")
+  mtext(side=2,line=2.5,"OBS BS or SS")
+  par(new=TRUE)
+  plot(xdf.flags$Date.time,xdf.flags$Turb.Manta.FNU,type="l",col="green",yaxt="n",xaxt="n",xlab="",ylab="")
+  points(xdf.flags$Date.time,xdf.flags$Turb.Manta.FNU,col="green",pch=pchval.turb.manta$pchval)
+  axis(side=4)
+  mtext(side=4,line=2.5,"Manta")
+  legend("topright",inset=c(0,-0.15),c("OBS BS","OBS SS","Manta","VAR","CAL","RNG, X"),horiz=TRUE,lty=c(1,1,1,NA,NA,NA),pch=c(NA,NA,NA,0,1,4),col=c("black","blue","green",rep("black",3)),cex=0.8)
+}
+
+```
+
